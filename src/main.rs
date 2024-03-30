@@ -29,6 +29,27 @@ fn get_encoding(value: String) -> Result<&'static Encoding> {
     }
 }
 
+fn write_position(position_path: &str, position: u64) -> Result<()> {
+    let position_dir = Path::new(&position_path).parent().unwrap();
+    if !position_dir.exists() {
+        create_dir_all(position_dir)?;
+    }
+    let mut position_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(position_path)?;
+    write!(position_file, "{}", position)?;
+    Ok(())
+}
+
+fn read_position(position_path: &str) -> Result<u64> {
+    let mut position_file = File::open(position_path)?;
+    let mut position_string = String::new();
+    position_file.read_to_string(&mut position_string)?;
+    Ok(position_string.parse::<u64>().unwrap_or(0))
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
 
@@ -43,10 +64,6 @@ fn main() -> Result<()> {
                 .to_string()
         }
     };
-    let position_dir = Path::new(&position_path).parent().unwrap();
-    if !position_dir.exists() {
-        create_dir_all(position_dir)?;
-    }
 
     let encoding = get_encoding(args.encoding)?;
 
@@ -55,10 +72,8 @@ fn main() -> Result<()> {
     let mut input_stream = BufReader::new(input_file);
 
     let mut last_position = 0;
-    if let Ok(mut position_file) = File::open(&position_path) {
-        let mut position_string = String::new();
-        position_file.read_to_string(&mut position_string)?;
-        last_position = position_string.parse::<u64>().unwrap_or(0);
+    if let Ok(position) = read_position(&position_path) {
+        last_position = position;
     }
     input_stream.seek(SeekFrom::Start(last_position))?;
 
@@ -81,12 +96,7 @@ fn main() -> Result<()> {
 
                 last_position += bytes_read as u64;
 
-                let mut position_file = OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .truncate(true)
-                    .open(position_path.clone())?;
-                write!(position_file, "{}", last_position)?;
+                write_position(&position_path, last_position)?;
             }
             Err(e) => {
                 dbg!("Error reading line:", &e);
