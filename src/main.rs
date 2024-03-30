@@ -1,64 +1,96 @@
-use encoding_rs::SHIFT_JIS;
-use std::fs::{File, OpenOptions};
-use std::io::{self, Read};
-use std::io::{BufReader, Seek, SeekFrom, Write};
+use encoding_rs::Encoding;
+use std::fs::{create_dir_all, File, OpenOptions};
+use std::io::{BufReader, Read, Seek, SeekFrom, Write};
+use std::path::{Path, MAIN_SEPARATOR};
 
-fn main() -> io::Result<()> {
-    // ログファイルと位置情報ファイルのパス
-    let log_path = "log.txt";
-    let position_path = "position.txt";
+use anyhow::Result;
+use clap::Parser;
 
-    // 位置情報ファイルを開き、前回の終了位置を取得
+#[derive(Parser, Debug)]
+#[command(version, about)]
+struct Args {
+    #[clap(short, long, env)]
+    input: String,
+    #[clap(short, long, env)]
+    output: String,
+    #[clap(short, long, env)]
+    encoding: String,
+    #[clap(short, long, env, default_value_t = 0)]
+    position: u64,
+    #[clap(long, env)]
+    position_path: Option<String>,
+}
+
+fn get_encoding(value: String) -> Result<&'static Encoding> {
+    if let Some(encoding) = Encoding::for_label(value.as_bytes()) {
+        Ok(encoding)
+    } else {
+        anyhow::bail!(format!("Unsupported encoding: {}", value))
+    }
+}
+
+fn main() -> Result<()> {
+    let args = Args::parse();
+
+    let position_path = match args.position_path {
+        Some(path) => path,
+        None => {
+            let cwd = std::env::current_dir()?;
+            cwd.join("positions")
+                .join(args.input.replace(':', MAIN_SEPARATOR.to_string().as_str()))
+                .to_str()
+                .unwrap()
+                .to_string()
+        }
+    };
+    let position_dir = Path::new(&position_path).parent().unwrap();
+    if !position_dir.exists() {
+        create_dir_all(position_dir)?;
+    }
+
+    let encoding = get_encoding(args.encoding)?;
+
+    let input = &args.input;
+    let input_file = File::open(input)?;
+    let mut input_stream = BufReader::new(input_file);
+
     let mut last_position = 0;
-    if let Ok(mut position_file) = File::open(position_path) {
+    if let Ok(mut position_file) = File::open(&position_path) {
         let mut position_string = String::new();
         position_file.read_to_string(&mut position_string)?;
         last_position = position_string.parse::<u64>().unwrap_or(0);
     }
+    input_stream.seek(SeekFrom::Start(last_position))?;
 
-    // ログファイルを開き、前回の終了位置から読み込みを開始
-    let log_file = File::open(log_path)?;
-    let mut log_stream = BufReader::new(log_file);
-    log_stream.seek(SeekFrom::Start(last_position))?;
+    let output = &args.output;
+    let mut output_file = OpenOptions::new().create(true).append(true).open(output)?;
 
-    // 出力ファイルを開く
-    let output_path = "output_utf8.txt";
-    let mut output_file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(output_path)?;
-
-    // ログファイルの末尾を監視し、新しい行が追加されるのを待つ
     loop {
         let mut buf = Vec::new();
-        match log_stream.read_to_end(&mut buf) {
+        match input_stream.read_to_end(&mut buf) {
             Ok(0) => {
-                // EOFに到達したら少し待ってから再試行
                 dbg!("EOF reached, waiting...");
                 std::thread::sleep(std::time::Duration::from_millis(1000));
                 continue;
             }
             Ok(bytes_read) => {
-                // 文字コードを変換して出力
-                let (cow, _encoding_used, _had_errors) = SHIFT_JIS.decode(&buf);
-                let utf8_line = cow.into_owned();
-                dbg!(&utf8_line);
-                output_file.write_all(utf8_line.as_bytes())?;
+                let (cow, _encoding_used, _had_errors) = encoding.decode(&buf);
+                let utf8_str = cow.into_owned();
+                dbg!(&utf8_str);
+                output_file.write_all(utf8_str.as_bytes())?;
 
-                // 現在の位置を更新
                 last_position += bytes_read as u64;
 
-                // 現在の位置を位置情報ファイルに保存
                 let mut position_file = OpenOptions::new()
                     .create(true)
                     .write(true)
                     .truncate(true)
-                    .open(position_path)?;
+                    .open(position_path.clone())?;
                 write!(position_file, "{}", last_position)?;
             }
             Err(e) => {
                 dbg!("Error reading line:", &e);
-                return Err(e);
+                anyhow::bail!(e);
             }
         }
     }
