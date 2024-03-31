@@ -7,7 +7,7 @@ use std::{
 use anyhow::Result;
 use clap::Parser;
 use encoding_rs::Encoding;
-use log::{debug, error, info};
+use log::{debug, error, info, LevelFilter};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -22,6 +22,20 @@ struct Args {
     position: u64,
     #[clap(long, env)]
     position_path: Option<String>,
+    #[clap(long, env, value_parser = ["off", "error", "warn", "info", "debug", "trace"], default_value = "info")]
+    log_level: String,
+}
+
+fn parse_level_filter(value: &str) -> LevelFilter {
+    match value.to_lowercase().as_str() {
+        "off" => LevelFilter::Off,
+        "error" => LevelFilter::Error,
+        "warn" => LevelFilter::Warn,
+        "info" => LevelFilter::Info,
+        "debug" => LevelFilter::Debug,
+        "trace" => LevelFilter::Trace,
+        _ => LevelFilter::Info,
+    }
 }
 
 fn get_encoding(value: &String) -> Result<&'static Encoding> {
@@ -54,8 +68,9 @@ fn read_position(position_path: &str) -> Result<u64> {
 }
 
 fn main() -> Result<()> {
-    env_logger::init();
     let args = Args::parse();
+    let level_filter = parse_level_filter(&args.log_level);
+    env_logger::builder().filter_level(level_filter).init();
 
     debug!("args: {:?}", &args);
 
