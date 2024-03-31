@@ -1,4 +1,11 @@
+// =============================================================================
+// File        : main.rs
+// Author      : yukimemi
+// Last Change : 2024/04/01 00:00:28.
+// =============================================================================
+
 use std::{
+    env,
     fs::{create_dir_all, File, OpenOptions},
     io::{BufReader, Read, Seek, SeekFrom, Write},
     path::{Path, MAIN_SEPARATOR},
@@ -6,8 +13,11 @@ use std::{
 
 use anyhow::Result;
 use clap::Parser;
+use crypto_hash::{hex_digest, Algorithm};
 use encoding_rs::Encoding;
-use log::{debug, error, info, LevelFilter};
+use go_defer::defer;
+use log::{debug, error, info, warn, LevelFilter};
+use single_instance::SingleInstance;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -73,6 +83,24 @@ fn main() -> Result<()> {
     env_logger::builder().filter_level(level_filter).init();
 
     debug!("args: {:?}", &args);
+    info!("==================== start ! ====================");
+    defer!({
+        info!("==================== end ! ====================");
+    });
+
+    let cmd_line = &env::args().collect::<Vec<String>>().join(" ");
+    let hash = hex_digest(Algorithm::SHA256, cmd_line.as_bytes());
+    #[cfg(not(target_os = "windows"))]
+    let hash = env::temp_dir().join(hash);
+    #[cfg(not(target_os = "windows"))]
+    let hash = hash.to_string_lossy();
+    debug!("hash: {}", &hash);
+    let instance = SingleInstance::new(&hash)?;
+    if !instance.is_single() {
+        warn!("Another instance is already running. [{}]", &cmd_line);
+        info!("==================== end ! ====================");
+        std::process::exit(1);
+    }
 
     let position_path = match args.position_path {
         Some(path) => path,
@@ -99,6 +127,10 @@ fn main() -> Result<()> {
     input_stream.seek(SeekFrom::Start(last_position))?;
 
     let output = &args.output;
+    let output_dir = Path::new(&output).parent().unwrap();
+    if !output_dir.exists() {
+        create_dir_all(output_dir)?;
+    }
     let mut output_file = OpenOptions::new().create(true).append(true).open(output)?;
 
     info!("input: [{}]", &args.input);
