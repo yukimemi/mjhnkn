@@ -1,0 +1,65 @@
+# [config]
+# skip_core_tasks = true
+
+[tasks.run]
+command = "cargo"
+args = ["run", "--"]
+
+[tasks.format]
+install_crate = "rustfmt"
+command = "cargo"
+args = ["fmt"]
+description = "Format code using rustfmt"
+
+[tasks.clean]
+command = "cargo"
+args = ["clean"]
+
+[tasks.build]
+command = "cargo"
+args = ["build"]
+dependencies = ["format"]
+
+[tasks.rebuild]
+command = "cargo"
+args = ["build"]
+dependencies = ["clean"]
+
+[tasks.install]
+command = "cargo"
+args = ["install", "--force", "--path", "."]
+dependencies = ["test"]
+
+[tasks.check]
+command = "cargo"
+args = ["check"]
+dependencies = ["format"]
+
+[tasks.lint]
+command = "cargo"
+args = ["clippy"]
+dependencies = ["format", "check"]
+
+[tasks.test]
+command = "cargo"
+args = ["test", "--", "--show-output"]
+dependencies = ["format", "lint"]
+
+[tasks.debug]
+script = ["MJHNKN_LOG_FILE=debug MJHNKN_LOG_STDOUT=debug cargo run -- ${@}"]
+
+[tasks.watch]
+env = { "RUST_LOG" = "mjhnkn=debug" }
+watch = { postpone = true }
+dependencies = ["test"]
+
+[tasks.default]
+dependencies = ["format", "build", "test"]
+
+[tasks.docker]
+command = "docker"
+args = ["run", "--rm", "-it", "-w", "${PWD}", "-v", "${PWD}:${PWD}", "rust"]
+
+[tasks.selfupdate]
+command = "cargo"
+args = ["install", "--force", "cargo-make"]

@@ -1,10 +1,13 @@
-use encoding_rs::Encoding;
-use std::fs::{create_dir_all, File, OpenOptions};
-use std::io::{BufReader, Read, Seek, SeekFrom, Write};
-use std::path::{Path, MAIN_SEPARATOR};
+use std::{
+    fs::{create_dir_all, File, OpenOptions},
+    io::{BufReader, Read, Seek, SeekFrom, Write},
+    path::{Path, MAIN_SEPARATOR},
+};
 
 use anyhow::Result;
 use clap::Parser;
+use encoding_rs::Encoding;
+use log::{debug, error, info};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -21,7 +24,7 @@ struct Args {
     position_path: Option<String>,
 }
 
-fn get_encoding(value: String) -> Result<&'static Encoding> {
+fn get_encoding(value: &String) -> Result<&'static Encoding> {
     if let Some(encoding) = Encoding::for_label(value.as_bytes()) {
         Ok(encoding)
     } else {
@@ -51,7 +54,10 @@ fn read_position(position_path: &str) -> Result<u64> {
 }
 
 fn main() -> Result<()> {
+    env_logger::init();
     let args = Args::parse();
+
+    debug!("args: {:?}", &args);
 
     let position_path = match args.position_path {
         Some(path) => path,
@@ -65,7 +71,7 @@ fn main() -> Result<()> {
         }
     };
 
-    let encoding = get_encoding(args.encoding)?;
+    let encoding = get_encoding(&args.encoding)?;
 
     let input = &args.input;
     let input_file = File::open(input)?;
@@ -80,27 +86,31 @@ fn main() -> Result<()> {
     let output = &args.output;
     let mut output_file = OpenOptions::new().create(true).append(true).open(output)?;
 
+    info!("input: [{}]", &args.input);
+    info!("output: [{}]", &args.output);
+    info!("encoding: [{}]", &args.encoding);
+    info!("position: [{}]", &args.position);
+    info!("position_path: [{}]", &position_path);
+
     loop {
         let mut buf = Vec::new();
         match input_stream.read_to_end(&mut buf) {
             Ok(0) => {
-                dbg!("EOF reached, waiting...");
+                debug!("EOF reached, waiting...");
                 std::thread::sleep(std::time::Duration::from_millis(1000));
                 continue;
             }
             Ok(bytes_read) => {
                 let (cow, _encoding_used, _had_errors) = encoding.decode(&buf);
                 let utf8_str = cow.into_owned();
-                dbg!(&utf8_str);
+                debug!("decode: [{}]", &utf8_str);
                 output_file.write_all(utf8_str.as_bytes())?;
 
                 last_position += bytes_read as u64;
-
                 write_position(&position_path, last_position)?;
             }
             Err(e) => {
-                dbg!("Error reading line:", &e);
-                anyhow::bail!(e);
+                error!("Error reading line: {}", &e);
             }
         }
     }

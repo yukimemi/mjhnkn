@@ -9,3 +9,5 @@ edition = "2021"
 anyhow = "1.0.81"
 clap = { version = "4.5.4", features = ["env", "derive"] }
 encoding_rs = "0.8.33"
+env_logger = "0.11.3"
+log = "0.4.21"
