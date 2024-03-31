@@ -16,6 +16,7 @@ Options:
   -e, --encoding <ENCODING>            [env: ENCODING=]
   -p, --position <POSITION>            [env: POSITION=] [default: 0]
       --position-path <POSITION_PATH>  [env: POSITION_PATH=]
+      --log-level <LOG_LEVEL>          [env: LOG_LEVEL=] [default: info] [possible values: off, error, warn, info, debug, trace]
   -h, --help                           Print help
   -V, --version                        Print version
 ```
