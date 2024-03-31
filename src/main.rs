@@ -125,7 +125,7 @@ fn main() -> Result<()> {
                 write_position(&position_path, last_position)?;
             }
             Err(e) => {
-                error!("Error reading line: {}", &e);
+                error!("Error reading bytes: {}", &e);
             }
         }
     }
