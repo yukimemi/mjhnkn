@@ -1,12 +1,12 @@
 // =============================================================================
 // File        : main.rs
 // Author      : yukimemi
-// Last Change : 2024/04/01 00:00:28.
+// Last Change : 2024/04/01 22:37:43.
 // =============================================================================
 
 use std::{
     env,
-    fs::{create_dir_all, File, OpenOptions},
+    fs::{create_dir_all, metadata, File, OpenOptions},
     io::{BufReader, Read, Seek, SeekFrom, Write},
     path::{Path, MAIN_SEPARATOR},
 };
@@ -140,6 +140,14 @@ fn main() -> Result<()> {
     info!("position_path: [{}]", &position_path);
 
     loop {
+        let metadata = metadata(input)?;
+        let current_size = metadata.len();
+
+        if current_size < last_position {
+            warn!("File was truncated. Resetting last_position.");
+            last_position = 0;
+            input_stream.seek(SeekFrom::Start(0))?;
+        }
         let mut buf = Vec::new();
         match input_stream.read_to_end(&mut buf) {
             Ok(0) => {
